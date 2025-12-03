@@ -15,7 +15,8 @@ st.title("📚 General Accounting Lab")
 st.write(
     """
     Ambiente interativo para estudar **Contabilidade Geral**:  
-    lançamentos de contas patrimoniais e de resultado, **Balancete**, **Balanço** e **DRE**.
+    lançamentos, **Balancete**, **Balanço**, **DRE** e **Fluxo de Caixa**
+    (método direto e indireto).
     """
 )
 
@@ -69,7 +70,8 @@ tabs = st.tabs([
     "📒 Lançamentos",
     "📊 Balancete",
     "🏛️ Balanço Patrimonial",
-    "📄 DRE"
+    "📄 DRE",
+    "💧 Fluxo de Caixa",
 ])
 
 # -------------------------------------------------------------------
@@ -281,4 +283,134 @@ with tabs[4]:
             st.error(f"**Prejuízo Líquido:** R$ {abs(resultado):,.2f}")
         else:
             st.info("Resultado de R$ 0,00 (ponto de equilíbrio).")
+
+# -------------------------------------------------------------------
+# TAB 6 – FLUXO DE CAIXA (DIRETO E INDIRETO)
+# -------------------------------------------------------------------
+with tabs[5]:
+    st.subheader("💧 Demonstração dos Fluxos de Caixa – Didática")
+
+    lanc_df = st.session_state["lancamentos"]
+    balancete = gerar_balancete(lanc_df)
+
+    if lanc_df.empty or balancete.empty:
+        st.info("Registre alguns lançamentos para visualizar o Fluxo de Caixa.")
+    else:
+        metodo = st.radio(
+            "Escolha o método de apresentação do fluxo de caixa:",
+            ["Método direto", "Método indireto"],
+            horizontal=True
+        )
+
+        # ------------------------- MÉTODO DIRETO -------------------------
+        if metodo == "Método direto":
+            st.markdown("### 💧 Fluxo de Caixa – Método Direto (didático)")
+
+            # identifica contas de caixa
+            contas_caixa = ["1.1.1", "1.1.2"]  # Caixa e Bancos
+
+            linhas_fc = []
+            for _, row in lanc_df.iterrows():
+                cod_deb = row["Código Débito"]
+                cod_cred = row["Código Crédito"]
+                valor = row["Valor"]
+                hist = row["Histórico"]
+
+                # Entrada de caixa: débito em caixa/bancos
+                if cod_deb in contas_caixa:
+                    contra = cod_cred
+                    tipo_fluxo = "Entrada"
+                # Saída de caixa: crédito em caixa/bancos
+                elif cod_cred in contas_caixa:
+                    contra = cod_deb
+                    tipo_fluxo = "Saída"
+                else:
+                    continue  # lançamento que não mexe com caixa
+
+                grupo_contra = plano_df.set_index("Código").loc[contra, "Grupo"]
+
+                # Classificação didática: operacional x financiamento
+                if grupo_contra in ["Receita", "Despesa", "Ativo", "Passivo"]:
+                    atividade = "Operacional"
+                else:
+                    atividade = "Outras"
+
+                linhas_fc.append({
+                    "Data": row["Data"],
+                    "Histórico": hist,
+                    "Atividade": atividade,
+                    "Tipo": tipo_fluxo,
+                    "Valor": valor,
+                })
+
+            if not linhas_fc:
+                st.info("Ainda não há lançamentos que movimentem Caixa ou Bancos.")
+            else:
+                df_fc = pd.DataFrame(linhas_fc)
+
+                # sinal: entradas positivas, saídas negativas
+                df_fc["Valor Ajustado"] = df_fc.apply(
+                    lambda r: r["Valor"] if r["Tipo"] == "Entrada" else -r["Valor"],
+                    axis=1,
+                )
+
+                st.dataframe(df_fc[["Data", "Histórico", "Atividade", "Tipo", "Valor", "Valor Ajustado"]],
+                             use_container_width=True)
+
+                total_operacional = df_fc[df_fc["Atividade"] == "Operacional"]["Valor Ajustado"].sum()
+                total_geral = df_fc["Valor Ajustado"].sum()
+
+                st.markdown("#### Resumo (método direto – didático)")
+                st.write(f"**Caixa líquido das atividades operacionais:** R$ {total_operacional:,.2f}")
+                st.write(f"**Variação total de caixa no período:** R$ {total_geral:,.2f}")
+
+        # ------------------------- MÉTODO INDIRETO -------------------------
+        else:
+            st.markdown("### 💧 Fluxo de Caixa – Método Indireto (didático)")
+
+            # Resultado do período já calculado na DRE
+            receitas = balancete[balancete["Grupo"] == "Receita"][["Conta", "Saldo"]]
+            despesas = balancete[balancete["Grupo"] == "Despesa"][["Conta", "Saldo"]]
+            total_receitas = receitas["Saldo"].sum()
+            total_despesas = despesas["Saldo"].sum()
+            lucro_liquido = total_receitas - total_despesas
+
+            st.write(f"**Lucro (ou prejuízo) líquido do período:** R$ {lucro_liquido:,.2f}")
+
+            # Variações em contas de capital de giro (simplificadas)
+            def saldo_conta(codigo: str) -> float:
+                linha = balancete[balancete["Código"] == codigo]
+                if linha.empty:
+                    return 0.0
+                return float(linha["Saldo"].iloc[0])
+
+            # Considerando saldo inicial = 0 (aplicativo didático)
+            var_clientes = saldo_conta("1.1.3")
+            var_estoques = saldo_conta("1.1.4")
+            var_fornecedores = saldo_conta("2.1.1")
+
+            st.markdown("#### Variações no capital de giro (saldo final – saldo inicial)")
+            st.write(f"Variação em **Clientes** (aumento de crédito a receber): R$ {var_clientes:,.2f}")
+            st.write(f"Variação em **Estoques**: R$ {var_estoques:,.2f}")
+            st.write(f"Variação em **Fornecedores** (dívidas com fornecedores): R$ {var_fornecedores:,.2f}")
+
+            # Ajuste simplificado:
+            # aumento de ativo circulante diminui caixa; aumento de passivo circulante aumenta caixa
+            caixa_operacional = (
+                lucro_liquido
+                - var_clientes
+                - var_estoques
+                + var_fornecedores
+            )
+
+            st.markdown("#### Caixa líquido gerado pelas atividades operacionais (didático)")
+            st.write(f"**Caixa líquido das atividades operacionais (método indireto):** "
+                     f"R$ {caixa_operacional:,.2f}")
+
+            st.info(
+                "Observação didática: considera-se saldo inicial das contas igual a zero "
+                "e não há ajustes por despesas não caixa (depreciação, etc.). "
+                "O objetivo é visualizar a lógica do método indireto."
+            )
+
 
