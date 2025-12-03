@@ -276,4 +276,150 @@ with tabs[4]:
             st.error(f"**Prejuízo Líquido:** R$ {abs(resultado):,.2f}")
         else:
             st.info("Resultado de R$ 0,00 (ponto de equilíbrio).")
+import streamlit as st
+import pandas as pd
+from datetime import date
+
+# -------------------------------------------------------------------
+# CONFIGURAÇÃO DA PÁGINA
+# -------------------------------------------------------------------
+st.set_page_config(
+    page_title="General Accounting Lab",
+    page_icon="📚",
+    layout="wide",
+)
+
+st.title("📚 General Accounting Lab")
+st.write(
+    """
+    Ambiente interativo para estudar **Contabilidade Geral**:  
+    lançamentos, **Balancete**, **Balanço**, **DRE** e **Fluxo de Caixa**
+    (método direto e indireto).
+    """
+)
+
+# -------------------------------------------------------------------
+# PLANO DE CONTAS SIMPLIFICADO
+# código, nome, grupo, natureza (D/C)
+# -------------------------------------------------------------------
+plano_contas_data = [
+    ("1.1.1", "Caixa", "Ativo", "D"),
+    ("1.1.2", "Bancos Conta Movimento", "Ativo", "D"),
+    ("1.1.3", "Clientes", "Ativo", "D"),
+    ("1.1.4", "Estoques", "Ativo", "D"),
+
+    ("2.1.1", "Fornecedores", "Passivo", "C"),
+    ("2.1.2", "Empréstimos a Pagar", "Passivo", "C"),
+
+    ("2.3.1", "Capital Social", "Patrimônio Líquido", "C"),
+    ("2.3.2", "Lucros Acumulados", "Patrimônio Líquido", "C"),
+
+    ("3.1.1", "Receita de Vendas", "Receita", "C"),
+    ("3.1.2", "Receita de Serviços", "Receita", "C"),
+
+    ("4.1.1", "Custo das Mercadorias Vendidas", "Despesa", "D"),
+    ("4.1.2", "Despesas Administrativas", "Despesa", "D"),
+    ("4.1.3", "Despesas de Vendas", "Despesa", "D"),
+]
+
+plano_df = pd.DataFrame(
+    plano_contas_data,
+    columns=["Código", "Conta", "Grupo", "Natureza"]
+)
+
+# -------------------------------------------------------------------
+# ESTADO INICIAL – DATAFRAME DE LANÇAMENTOS
+# -------------------------------------------------------------------
+if "lancamentos" not in st.session_state:
+    st.session_state["lancamentos"] = pd.DataFrame(
+        columns=[
+            "Data", "Histórico",
+            "Código Débito", "Conta Débito",
+            "Código Crédito", "Conta Crédito",
+            "Valor"
+        ]
+    )
+
+# -------------------------------------------------------------------
+# TABS PRINCIPAIS
+# -------------------------------------------------------------------
+tabs = st.tabs([
+    "📘 Plano de Contas",
+    "📒 Lançamentos",
+    "📊 Balancete",
+    "🏛️ Balanço Patrimonial",
+    "📄 DRE",
+    "💧 Fluxo de Caixa",
+])
+
+# -------------------------------------------------------------------
+# TAB 1 – PLANO DE CONTAS
+# -------------------------------------------------------------------
+with tabs[0]:
+    st.subheader("📘 Plano de Contas Simplificado")
+    st.dataframe(plano_df, use_container_width=True)
+
+# -------------------------------------------------------------------
+# TAB 2 – LANÇAMENTOS
+# -------------------------------------------------------------------
+with tabs[1]:
+    st.subheader("📒 Registro de Lançamentos Contábeis")
+
+    col_esq, col_dir = st.columns(2)
+
+    with col_esq:
+        data_lanc = st.date_input("Data do lançamento", value=date.today())
+        historico = st.text_input("Histórico", value="")
+
+    with col_dir:
+        contas_opcoes = plano_df["Código"] + " - " + plano_df["Conta"]
+
+        conta_debito = st.selectbox(
+            "Conta de Débito",
+            options=contas_opcoes,
+        )
+        conta_credito = st.selectbox(
+            "Conta de Crédito",
+            options=contas_opcoes,
+        )
+        valor = st.number_input(
+            "Valor (R$)",
+            min_value=0.0,
+            step=100.0,
+            format="%.2f"
+        )
+
+    if st.button("➕ Adicionar lançamento"):
+        if valor <= 0:
+            st.warning("Informe um valor maior que zero.")
+        elif conta_debito == conta_credito:
+            st.warning("Conta de débito e crédito não podem ser iguais.")
+        else:
+            cod_deb, nome_deb = conta_debito.split(" - ", 1)
+            cod_cred, nome_cred = conta_credito.split(" - ", 1)
+
+            novo_lanc = pd.DataFrame([{
+                "Data": data_lanc,
+                "Histórico": historico,
+                "Código Débito": cod_deb,
+                "Conta Débito": nome_deb,
+                "Código Crédito": cod_cred,
+                "Conta Crédito": nome_cred,
+                "Valor": valor,
+            }])
+
+            st.session_state["lancamentos"] = pd.concat(
+                [st.session_state["lancamentos"], novo_lanc],
+                ignore_index=True
+            )
+
+            st.success("Lançamento incluído com sucesso!")
+
+    st.markdown("### 🧾 Lançamentos registrados")
+    if st.session_state["lancamentos"].empty:
+        st.info("Nenhum lançamento registrado ainda.")
+    else:
+        st.dataframe(st.session_state["lancamentos"], use_container_width=True)
+
+        if st.button("🗑️ Limpar todos os lan
 
